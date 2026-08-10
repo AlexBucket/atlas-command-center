@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}Atlas v3 — Network{% endblock %}
+
+{% block content %}
+<div class="page-title">Network</div>
+<div class="page-subtitle">DNS, traffic, and filtering</div>
+
+<div x-data="networkWidget()" x-init="fetchNetwork()">
+
+  <!-- Stats Grid -->
+  <div x-show="!netLoaded" class="stats-grid" style="grid-template-columns:repeat(4,1fr)">
+    <div class="stat-card"><div class="skeleton"><div class="skeleton-line" style="width:50%"></div></div></div>
+    <div class="stat-card"><div class="skeleton"><div class="skeleton-line" style="width:50%"></div></div></div>
+    <div class="stat-card"><div class="skeleton"><div class="skeleton-line" style="width:50%"></div></div></div>
+    <div class="stat-card"><div class="skeleton"><div class="skeleton-line" style="width:50%"></div></div></div>
+  </div>
+  <div x-show="netLoaded" class="stats-grid" style="grid-template-columns:repeat(4,1fr)">
+    <div class="stat-card">
+      <div class="stat-label">Total Queries</div>
+      <div class="stat-value" style="font-size:22px" x-text="(adguard?.total_queries || 0).toLocaleString()"></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Blocked</div>
+      <div class="stat-value" x-text="(adguard?.blocked || 0).toLocaleString()"></div>
+      <div class="stat-sub" x-text="(adguard?.blocked_percent||0)+'% of total'"></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Filter Rules</div>
+      <div class="stat-value" style="font-size:22px" x-text="(adguard?.filter_rules_count || 0).toLocaleString()"></div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Avg Response</div>
+      <div class="stat-value" style="font-size:22px" x-text="adguard?.avg_processing_time+'s'"></div>
+    </div>
+  </div>
+
+  <!-- Top Queried / Top Blocked -->
+  <div class="two-col" style="margin-top:8px">
+    <div class="section">
+      <div class="section-header">
+        <div class="section-title">Top Queried</div>
+        <span style="font-size:11px;color:var(--text-muted)" x-show="netLoaded" x-text="(topQueried||[]).length+' domains'"></span>
+      </div>
+      <div x-show="!netLoaded" class="skeleton">
+        <div class="skeleton-line" style="width:90%"></div>
+        <div class="skeleton-line" style="width:80%"></div>
+        <div class="skeleton-line" style="width:85%"></div>
+        <div class="skeleton-line" style="width:70%"></div>
+        <div class="skeleton-line" style="width:75%"></div>
+      </div>
+      <div x-show="netLoaded && (!topQueried || topQueried.length === 0)" class="widget-empty" style="text-align:left">No data</div>
+      <div class="activity-list">
+        <template x-for="(q,i) in (topQueried || []).slice(0,12)" :key="i">
+          <div class="activity-item">
+            <span style="width:36px;text-align:right;font-size:11px;color:var(--text-muted);font-variant-numeric:tabular-nums" x-text="q.count.toLocaleString()"></span>
+            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="q.domain"></span>
+          </div>
+        </template>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-header">
+        <div class="section-title">Top Blocked</div>
+        <span style="font-size:11px;color:var(--text-muted)" x-show="netLoaded" x-text="(topBlocked||[]).length+' domains'"></span>
+      </div>
+      <div x-show="!netLoaded" class="skeleton">
+        <div class="skeleton-line" style="width:90%"></div>
+        <div class="skeleton-line" style="width:80%"></div>
+        <div class="skeleton-line" style="width:85%"></div>
+        <div class="skeleton-line" style="width:70%"></div>
+        <div class="skeleton-line" style="width:75%"></div>
+      </div>
+      <div x-show="netLoaded && (!topBlocked || topBlocked.length === 0)" class="widget-empty" style="text-align:left">No blocked domains</div>
+      <div class="activity-list">
+        <template x-for="(b,i) in (topBlocked || []).slice(0,12)" :key="i">
+          <div class="activity-item">
+            <span style="width:36px;text-align:right;font-size:11px;color:var(--accent-orange);font-variant-numeric:tabular-nums" x-text="b.count.toLocaleString()"></span>
+            <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="b.domain"></span>
+          </div>
+        </template>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+document.addEventListener('alpine:init', () => {
+  Alpine.data('networkWidget', () => ({
+    netLoaded: false,
+    adguard: {},
+    topQueried: [],
+    topBlocked: [],
+    fetchNetwork() {
+      fetch('/api/overview')
+        .then(r => r.json())
+        .then(r => {
+          const d = r.data || {};
+          this.adguard = d.adguard || {};
+          this.topQueried = d.adguard?.top_queried || [];
+          this.topBlocked = d.adguard?.top_blocked || [];
+          this.netLoaded = true;
+        })
+        .catch(() => { this.netLoaded = true; });
+    }
+  }));
+});
+</script>
+{% endblock %}

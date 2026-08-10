@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+{% block title %}Atlas v3 — Infrastructure{% endblock %}
+
+{% block content %}
+<div class="page-title">Infrastructure</div>
+<div class="page-subtitle">Proxmox VMs, LXCs, and Docker containers</div>
+
+<div x-data="infraWidget()" x-init="fetchInfra()">
+
+  <!-- Proxmox Node Stats -->
+  <div class="section">
+    <div class="section-header"><div class="section-title">Proxmox</div></div>
+    <div x-show="!infraLoaded" class="skeleton">
+      <div class="skeleton-line" style="width:30%"></div>
+      <div class="skeleton-line" style="width:45%"></div>
+      <div class="skeleton-line" style="width:25%"></div>
+    </div>
+    <div x-show="infraLoaded && proxmox.configured">
+      <div class="stats-grid" style="grid-template-columns:repeat(3,1fr)">
+        <div class="stat-card">
+          <div class="stat-label">CPU</div>
+          <div class="stat-value" x-text="proxmox.node?.cpu_percent+'%'"></div>
+          <div class="stat-sub" x-text="proxmox.node?.cpu_count+' cores'"></div>
+          <div class="stat-bar"><div class="stat-bar-fill" :style="'width:'+(proxmox.node?.cpu_percent||0)+'%'" style="background:var(--accent-cyan)"></div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Memory</div>
+          <div class="stat-value" x-text="(proxmox.node?.memory_percent||0)+'%'"></div>
+          <div class="stat-sub" x-text="(proxmox.node?.memory_used_gb||0)+' / '+(proxmox.node?.memory_total_gb||0)+' GB'"></div>
+          <div class="stat-bar"><div class="stat-bar-fill" :style="'width:'+(proxmox.node?.memory_percent||0)+'%'" style="background:var(--accent-purple)"></div></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-label">Uptime</div>
+          <div class="stat-value" style="font-size:20px" x-text="proxmoxUptime()"></div>
+          <div class="stat-sub" x-text="proxmox.node?.hostname || ''"></div>
+        </div>
+      </div>
+      <!-- VMs and LXCs in two columns -->
+      <div class="two-col" style="margin-top:16px">
+        <div>
+          <div class="card-label" style="margin-bottom:8px">
+            <span>LXCs</span>
+            <span style="font-size:10px;color:var(--text-muted);font-weight:400" x-text="'('+(proxmox?.lxc||[]).filter(l=>l.status==='running').length+' running)'"></span>
+          </div>
+          <div x-show="(proxmox?.lxc||[]).length === 0" class="widget-empty">No LXCs</div>
+          <div class="container-list">
+            <template x-for="l in (proxmox?.lxc || [])" :key="l.vmid">
+              <div class="container-item">
+                <span class="dot" :class="l.status==='running'?'dot-green':'dot-red'"></span>
+                <span x-text="l.name"></span>
+                <span style="margin-left:auto;font-size:10px;color:var(--text-muted)" x-text="l.vmid"></span>
+              </div>
+            </template>
+          </div>
+        </div>
+        <div>
+          <div class="card-label" style="margin-bottom:8px">
+            <span>VMs</span>
+            <span style="font-size:10px;color:var(--text-muted);font-weight:400" x-text="'('+(proxmox?.vms||[]).filter(v=>v.status==='running').length+' running)'"></span>
+          </div>
+          <div x-show="(proxmox?.vms||[]).length === 0" class="widget-empty">No VMs</div>
+          <div class="container-list">
+            <template x-for="v in (proxmox?.vms || [])" :key="v.vmid">
+              <div class="container-item">
+                <span class="dot" :class="v.status==='running'?'dot-green':'dot-red'"></span>
+                <span x-text="v.name"></span>
+                <span style="margin-left:auto;font-size:10px;color:var(--text-muted)" x-text="v.vmid"></span>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div x-show="infraLoaded && !proxmox.configured">
+      <p style="color:var(--text-muted);font-size:13px">Proxmox not configured</p>
+    </div>
+  </div>
+
+  <!-- Docker Containers (grouped by status) -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-title">Docker</div>
+      <span style="font-size:12px;color:var(--text-muted)" x-text="'Running: '+(docker?.running||0)+' / '+(docker?.total||0)+' total'"></span>
+    </div>
+    <div x-show="!infraLoaded" class="skeleton">
+      <div class="skeleton-line" style="width:90%"></div>
+      <div class="skeleton-line" style="width:80%"></div>
+      <div class="skeleton-line" style="width:70%"></div>
+    </div>
+    <div x-show="infraLoaded">
+      <!-- Running containers -->
+      <div style="margin-bottom:12px">
+        <div class="card-label" style="margin-bottom:8px;color:var(--accent-green)">● Running</div>
+        <div x-show="runningContainers.length === 0" class="widget-empty" style="text-align:left">No running containers</div>
+        <div class="container-list" style="grid-template-columns:repeat(auto-fill,minmax(140px,1fr))">
+          <template x-for="c in runningContainers" :key="c.id">
+            <a :href="'https://'+c.name+'.media.alexbucket.com'" target="_blank" class="container-item">
+              <span class="dot dot-green"></span>
+              <span x-text="c.name"></span>
+            </a>
+          </template>
+        </div>
+      </div>
+      <!-- Stopped containers -->
+      <div x-show="stoppedContainers.length > 0">
+        <div class="card-label" style="margin-bottom:8px;color:var(--accent-red)">● Stopped</div>
+        <div class="container-list" style="grid-template-columns:repeat(auto-fill,minmax(140px,1fr))">
+          <template x-for="c in stoppedContainers" :key="c.id">
+            <div class="container-item">
+              <span class="dot dot-red"></span>
+              <span x-text="c.name"></span>
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+document.addEventListener('alpine:init', () => {
+  Alpine.data('infraWidget', () => ({
+    infraLoaded: false,
+    proxmox: { configured: false, node: {}, lxc: [], vms: [] },
+    docker: { running: 0, total: 0, containers: [] },
+    get runningContainers() {
+      return (this.docker.containers || []).filter(c => c.state === 'running');
+    },
+    get stoppedContainers() {
+      return (this.docker.containers || []).filter(c => c.state !== 'running');
+    },
+    fetchInfra() {
+      fetch('/api/overview')
+        .then(r => r.json())
+        .then(r => {
+          const d = r.data || {};
+          this.proxmox = d.proxmox || { configured: false, node: {}, lxc: [], vms: [] };
+          this.docker = d.docker || { running: 0, total: 0, containers: [] };
+          this.infraLoaded = true;
+        })
+        .catch(() => { this.infraLoaded = true; });
+    },
+    proxmoxUptime() {
+      const sec = this.proxmox.node?.uptime || 0;
+      const d = Math.floor(sec / 86400);
+      const h = Math.floor((sec % 86400) / 3600);
+      return d + 'd ' + h + 'h';
+    }
+  }));
+});
+</script>
+{% endblock %}

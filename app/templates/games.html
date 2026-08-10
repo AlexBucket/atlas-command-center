@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+{% block title %}Atlas v3 — Games{% endblock %}
+
+{% block content %}
+<div class="page-title">Game Servers</div>
+<div class="page-subtitle">AMP-managed game instances</div>
+
+<div x-data="gamesWidget()" x-init="fetchGames()">
+
+  <div x-show="!gamesLoaded" class="card-grid" style="grid-template-columns:repeat(auto-fill,minmax(260px,1fr))">
+    <div class="server-card">
+      <div class="skeleton">
+        <div class="skeleton-line" style="width:60%"></div>
+        <div class="skeleton-line" style="width:40%"></div>
+        <div class="skeleton-line" style="width:50%"></div>
+      </div>
+    </div>
+    <div class="server-card">
+      <div class="skeleton">
+        <div class="skeleton-line" style="width:60%"></div>
+        <div class="skeleton-line" style="width:40%"></div>
+        <div class="skeleton-line" style="width:50%"></div>
+      </div>
+    </div>
+  </div>
+
+  <div x-show="gamesLoaded && gameServers.length === 0" class="widget-empty" style="padding:40px;text-align:center">
+    No game servers configured
+  </div>
+
+  <div class="card-grid" style="grid-template-columns:repeat(auto-fill,minmax(280px,1fr))">
+    <template x-for="s in gameServers" :key="s.id">
+      <div class="server-card">
+        <div class="server-card-header">
+          <div class="server-card-title">
+            <span class="dot" :class="s.running?'dot-green':'dot-red'" style="width:10px;height:10px"></span>
+            <span class="server-card-name" x-text="s.name"></span>
+          </div>
+          <span class="server-card-module" x-text="s.module"></span>
+        </div>
+        <div class="server-card-stats">
+          <div>
+            <div class="server-stat-label">Players</div>
+            <div class="server-stat-value" x-text="s.active_users || 0"></div>
+          </div>
+          <div>
+            <div class="server-stat-label">Status</div>
+            <div class="server-stat-value" :class="s.running?'status-ok':'status-err'" x-text="s.running ? 'Online' : 'Offline'"></div>
+          </div>
+          <div x-show="s.uptime">
+            <div class="server-stat-label">Uptime</div>
+            <div class="server-stat-value" style="font-size:12px" x-text="s.uptime"></div>
+          </div>
+          <div x-show="s.max_users">
+            <div class="server-stat-label">Max Players</div>
+            <div class="server-stat-value" x-text="s.max_users"></div>
+          </div>
+        </div>
+        <div x-show="s.description" style="margin-top:10px;font-size:11px;color:var(--text-muted)" x-text="s.description"></div>
+        <div style="margin-top:10px;display:flex;gap:8px">
+          <span class="dot" :class="s.running?'dot-green':'dot-red'"></span>
+          <span style="font-size:11px" :class="s.running?'status-ok':'status-err'" x-text="s.running ? 'Accepting connections' : 'Server offline'"></span>
+        </div>
+      </div>
+    </template>
+  </div>
+
+</div>
+
+<script>
+document.addEventListener('alpine:init', () => {
+  Alpine.data('gamesWidget', () => ({
+    gamesLoaded: false,
+    gameServers: [],
+    fetchGames() {
+      fetch('/api/overview')
+        .then(r => r.json())
+        .then(r => {
+          const d = r.data || {};
+          this.gameServers = d.amp?.servers || [];
+          this.gamesLoaded = true;
+        })
+        .catch(() => { this.gamesLoaded = true; });
+    }
+  }));
+});
+</script>
+{% endblock %}

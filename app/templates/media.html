@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+{% block title %}Atlas v3 — Media{% endblock %}
+
+{% block content %}
+<div class="page-title">Media</div>
+<div class="page-subtitle">Library, downloads, and automation</div>
+
+<div x-data="mediaWidget()" x-init="fetchMedia()">
+
+  <!-- *Arr Stats Grid -->
+  <div x-show="!mediaLoaded" class="stats-grid" style="grid-template-columns:repeat(5,1fr)">
+    <div class="stat-card"><div class="skeleton"><div class="skeleton-line" style="width:40%"></div><div class="skeleton-line" style="width:70%"></div></div></div>
+    <div class="stat-card"><div class="skeleton"><div class="skeleton-line" style="width:40%"></div><div class="skeleton-line" style="width:70%"></div></div></div>
+    <div class="stat-card"><div class="skeleton"><div class="skeleton-line" style="width:40%"></div><div class="skeleton-line" style="width:70%"></div></div></div>
+    <div class="stat-card"><div class="skeleton"><div class="skeleton-line" style="width:40%"></div><div class="skeleton-line" style="width:70%"></div></div></div>
+    <div class="stat-card"><div class="skeleton"><div class="skeleton-line" style="width:40%"></div><div class="skeleton-line" style="width:70%"></div></div></div>
+  </div>
+  <div x-show="mediaLoaded" class="stats-grid" style="grid-template-columns:repeat(5,1fr)">
+    <div class="stat-card">
+      <div class="stat-label">Series</div>
+      <div class="stat-value" x-text="sonarr.series_count || 0"></div>
+      <div class="stat-sub"><span x-text="sonarr.wanted||0"></span> wanted</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Movies</div>
+      <div class="stat-value" x-text="radarr.movie_count || 0"></div>
+      <div class="stat-sub"><span x-text="radarr.missing||0"></span> missing</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Music</div>
+      <div class="stat-value" x-text="lidarr.artist_count || 0"></div>
+      <div class="stat-sub">artists</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Books</div>
+      <div class="stat-value" x-text="readarr.book_count || 0"></div>
+      <div class="stat-sub">books</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Indexers</div>
+      <div class="stat-value" x-text="prowlarr.indexer_count || 0"></div>
+      <div class="stat-sub">connected</div>
+    </div>
+  </div>
+
+  <!-- NZBGet Downloads -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-title">Downloads</div>
+      <span style="font-size:12px;color:var(--text-muted)" x-show="mediaLoaded" x-text="nzbSpeed"></span>
+    </div>
+    <div x-show="!mediaLoaded" class="skeleton">
+      <div class="skeleton-line" style="width:70%"></div>
+      <div class="skeleton-bar" style="width:90%"></div>
+      <div class="skeleton-line" style="width:50%"></div>
+    </div>
+    <div x-show="mediaLoaded">
+      <div x-show="nzbDownloads.length === 0" class="widget-empty" style="text-align:left;padding:12px 0">No active downloads</div>
+      <template x-for="(d,i) in nzbDownloads.slice(0,5)" :key="i">
+        <div class="download-item">
+          <div class="download-info">
+            <div class="download-name" x-text="d.name"></div>
+            <div class="download-meta">
+              <span x-text="d.progress+'%'"></span>
+            </div>
+            <div class="progress-bar" style="height:4px;margin-top:4px">
+              <div class="progress-fill" :class="d.progress > 80 ? 'green' : d.progress > 50 ? 'orange' : ''" :style="'width:'+d.progress+'%'"></div>
+            </div>
+          </div>
+        </div>
+      </template>
+    </div>
+  </div>
+
+</div>
+
+<script>
+document.addEventListener('alpine:init', () => {
+  Alpine.data('mediaWidget', () => ({
+    mediaLoaded: false,
+    sonarr: {}, radarr: {}, lidarr: {}, readarr: {}, prowlarr: {},
+    nzbSpeed: '0 B/s', nzbDownloads: [],
+    fetchMedia() {
+      fetch('/api/overview')
+        .then(r => r.json())
+        .then(r => {
+          const d = r.data || {};
+          const media = d.media || {};
+          this.sonarr = media.sonarr || {};
+          this.radarr = media.radarr || {};
+          this.lidarr = media.lidarr || {};
+          this.readarr = media.readarr || {};
+          this.prowlarr = media.prowlarr || {};
+          this.mediaLoaded = true;
+        })
+        .catch(() => { this.mediaLoaded = true; });
+      fetch('/api/nzbget')
+        .then(r => r.json())
+        .then(r => {
+          const nz = r.data || {};
+          this.nzbSpeed = nz.download_rate_human || '0 B/s';
+          this.nzbDownloads = (nz.downloads || []).map(d => ({
+            name: d.name || 'Unknown',
+            progress: d.progress || 0,
+          }));
+        })
+        .catch(() => {});
+    }
+  }));
+});
+</script>
+{% endblock %}

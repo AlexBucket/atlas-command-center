@@ -1,0 +1,367 @@
+{% extends "base.html" %}
+{% block title %}Atlas v3 — Overview{% endblock %}
+
+{% block content %}
+<div class="page-title">Command Center</div>
+<div class="page-subtitle" x-data="{ dt: '' }" x-init="dt = new Date().toLocaleDateString('en-AU', { weekday:'long', day:'numeric', month:'long', year:'numeric' })">
+  <span x-text="dt"></span>
+  <span style="margin-left:12px;font-size:11px;color:var(--text-muted)">v3 beta</span>
+</div>
+
+<div class="widget-grid">
+
+  <!-- Shift -->
+  <div class="widget-card" x-data="shiftWidget()" x-init="fetchShift()">
+    <div class="widget-title">Shift</div>
+    <div class="widget-body">
+      <div x-show="!loaded" class="skeleton">
+        <div class="skeleton-line" style="width:50%"></div>
+        <div class="skeleton-line" style="width:30%"></div>
+      </div>
+      <div x-show="loaded">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+          <span style="font-size:24px" x-text="icon"></span>
+          <div>
+            <div style="font-weight:600;font-size:14px" x-text="label"></div>
+            <div style="font-size:11px;color:var(--text-muted)" x-show="shift_start" x-text="'on at '+shift_start"></div>
+          </div>
+        </div>
+        <div class="alarm-compact" x-show="alarm_time">
+          <div class="alarm-compact-time" x-text="alarm_time"></div>
+          <div class="alarm-compact-label">Next alarm</div>
+        </div>
+        <div style="font-size:11px;color:var(--text-muted);margin-top:6px" x-text="cycle_progress"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Weather -->
+  <div class="widget-card" x-data="weatherWidget()" x-init="fetchWeather()">
+    <div class="widget-title">Weather</div>
+    <div class="widget-body">
+      <div x-show="!loaded" class="skeleton">
+        <div class="skeleton-line" style="width:70%"></div>
+        <div class="skeleton-line" style="width:40%"></div>
+      </div>
+      <div x-show="loaded && !error" class="weather-display">
+        <div class="weather-icon" x-text="icon"></div>
+        <div>
+          <div class="weather-temp" x-text="temp"></div>
+          <div class="weather-detail" x-text="condition"></div>
+          <div class="weather-meta">
+            <span class="weather-meta-item">💧 <span x-text="humidity"></span></span>
+            <span class="weather-meta-item">🌬️ <span x-text="wind"></span></span>
+          </div>
+        </div>
+      </div>
+      <div x-show="error" class="widget-error">⚠ Weather unavailable</div>
+    </div>
+  </div>
+
+  <!-- Alerts -->
+  <div class="widget-card" x-data="alertsWidget()" x-init="fetchAlerts()">
+    <div class="widget-title">Alerts</div>
+    <div class="widget-body">
+      <div x-show="!loaded" class="skeleton">
+        <div class="skeleton-line" style="width:80%"></div>
+      </div>
+      <div x-show="loaded">
+        <div x-show="items.length === 0" class="widget-empty">✓ All clear</div>
+        <template x-for="a in items" :key="a.id">
+          <div class="activity-item" :class="'alert-'+a.severity">
+            <span class="dot" :class="a.severity==='critical'?'dot-red':a.severity==='warning'?'dot-yellow':'dot-green'"></span>
+            <span x-text="a.title"></span>
+          </div>
+        </template>
+      </div>
+    </div>
+  </div>
+
+  <!-- System -->
+  <div class="widget-card" x-data="sysStatsWidget()" x-init="fetchSysStats()">
+    <div class="widget-title">System</div>
+    <div class="widget-body">
+      <div x-show="!loaded" class="skeleton">
+        <div class="skeleton-line" style="width:50%"></div>
+        <div class="skeleton-bar" style="width:100%"></div>
+        <div class="skeleton-line" style="width:50%"></div>
+        <div class="skeleton-bar" style="width:100%"></div>
+        <div class="skeleton-line" style="width:50%"></div>
+        <div class="skeleton-bar" style="width:100%"></div>
+      </div>
+      <div x-show="loaded">
+        <div class="compact-stat"><span class="compact-stat-label">CPU</span><span class="compact-stat-value" x-text="cpu.percent+'%'"></span></div>
+        <div class="stat-bar"><div class="stat-bar-fill" :style="'width:'+cpu.percent+'%'" style="background:var(--accent-cyan)"></div></div>
+        <div class="compact-stat" style="margin-top:4px"><span class="compact-stat-label">RAM</span><span class="compact-stat-value" x-text="ram.used_gb+'/'+ram.total_gb+' GB'"></span></div>
+        <div class="stat-bar"><div class="stat-bar-fill" :style="'width:'+ram.percent+'%'" style="background:var(--accent-purple)"></div></div>
+        <div class="compact-stat" style="margin-top:4px"><span class="compact-stat-label">Disk</span><span class="compact-stat-value" x-text="disk.used_gb+'/'+disk.total_gb+' GB'"></span></div>
+        <div class="stat-bar"><div class="stat-bar-fill" :style="'width:'+disk.percent+'%'" style="background:var(--accent-green)"></div></div>
+        <div class="compact-stat" style="margin-top:8px"><span class="compact-stat-label">Uptime</span><span class="compact-stat-value" style="font-size:11px" x-text="uptime"></span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Household -->
+  <div class="widget-card" x-data="householdWidget()" x-init="fetchHousehold()">
+    <div class="widget-title">Household</div>
+    <div class="widget-body">
+      <div x-show="!loaded" class="skeleton">
+        <div class="skeleton-line" style="width:40%"></div>
+        <div class="skeleton-line" style="width:60%"></div>
+      </div>
+      <div x-show="loaded">
+        <div style="margin-bottom:8px">
+          <div style="font-size:13px;color:var(--text-primary)">
+            <span x-text="homeCount"></span> home
+            <span style="color:var(--text-muted);font-size:11px" x-text="whoHome"></span>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--text-muted);margin-bottom:6px">Temperatures</div>
+        <template x-for="(t,i) in temps" :key="i">
+          <div class="temp-item">
+            <span class="temp-location" x-text="t.name"></span>
+            <span class="temp-value" :class="tempClass(parseFloat(t.state))" x-text="t.state+'°'"></span>
+          </div>
+        </template>
+      </div>
+    </div>
+  </div>
+
+  <!-- NZBGet -->
+  <div class="widget-card" x-data="nzbgetWidget()" x-init="fetchNzbget()">
+    <div class="widget-title">Downloads</div>
+    <div class="widget-body">
+      <div x-show="!loaded" class="skeleton">
+        <div class="skeleton-line" style="width:70%"></div>
+        <div class="skeleton-bar" style="width:80%"></div>
+      </div>
+      <div x-show="loaded">
+        <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+          <span style="font-size:13px" x-text="speed"></span>
+          <span style="font-size:11px;color:var(--text-muted)" x-text="queue+' queued'"></span>
+        </div>
+        <div x-show="downloads.length > 0" style="margin-top:8px">
+          <template x-for="(d,i) in downloads.slice(0,3)" :key="i">
+            <div class="download-item">
+              <div class="download-info">
+                <div class="download-name" x-text="d.name"></div>
+                <div class="download-meta"><span x-text="d.progress+'%'"></span></div>
+              </div>
+            </div>
+          </template>
+        </div>
+        <div x-show="downloads.length === 0" style="font-size:12px;color:var(--text-muted);margin-top:4px">No active downloads</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Containers full width -->
+  <div class="widget-card widget-full" x-data="containersWidget()" x-init="fetchContainers()">
+    <div class="widget-title">Containers <span style="font-size:11px;color:var(--text-muted);font-weight:400" x-text="'('+runningCount+'/'+totalCount+' running)'"></span></div>
+    <div class="widget-body">
+      <div x-show="!loaded" class="skeleton">
+        <div class="skeleton-line" style="width:90%"></div>
+        <div class="skeleton-line" style="width:70%"></div>
+        <div class="skeleton-line" style="width:80%"></div>
+      </div>
+      <div x-show="loaded" class="container-list" style="grid-template-columns:repeat(auto-fill,minmax(130px,1fr))">
+        <template x-for="c in containers" :key="c.id">
+          <div class="container-item">
+            <span class="dot" :class="c.state==='running'?'dot-green':'dot-red'"></span>
+            <span x-text="c.name" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+          </div>
+        </template>
+      </div>
+    </div>
+  </div>
+
+  <!-- Media Library -->
+  <div class="widget-card" x-data="arrWidget()" x-init="fetchArr()">
+    <div class="widget-title">Media Library</div>
+    <div class="widget-body">
+      <div x-show="!loaded" class="skeleton">
+        <div class="skeleton-line" style="width:60%"></div>
+        <div class="skeleton-line" style="width:45%"></div>
+        <div class="skeleton-line" style="width:55%"></div>
+      </div>
+      <div x-show="loaded">
+        <div class="compact-stat"><span class="compact-stat-label">Series</span><span class="compact-stat-value" x-text="sonarr.series_count + ' (' + sonarr.wanted + ' wanted)'"></span></div>
+        <div class="compact-stat"><span class="compact-stat-label">Movies</span><span class="compact-stat-value" x-text="radarr.movie_count + ' (' + radarr.missing + ' missing)'"></span></div>
+        <div class="compact-stat"><span class="compact-stat-label">Music</span><span class="compact-stat-value" x-text="lidarr.artist_count+' artists'"></span></div>
+        <div class="compact-stat"><span class="compact-stat-label">Books</span><span class="compact-stat-value" x-text="readarr.book_count+' books'"></span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Details -->
+  <div class="widget-card" x-data="arrWidget()" x-init="fetchArr()">
+    <div class="widget-title">Details</div>
+    <div class="widget-body">
+      <div x-show="!loaded" class="skeleton">
+        <div class="skeleton-line" style="width:50%"></div>
+        <div class="skeleton-line" style="width:70%"></div>
+      </div>
+      <div x-show="loaded">
+        <div class="compact-stat"><span class="compact-stat-label">Indexers</span><span class="compact-stat-value" x-text="prowlarr.indexer_count+' connected'"></span></div>
+        <div class="compact-stat"><span class="compact-stat-label">Wanted Series</span><span class="compact-stat-value" x-text="sonarr.wanted"></span></div>
+        <div class="compact-stat"><span class="compact-stat-label">Missing Movies</span><span class="compact-stat-value" x-text="radarr.missing"></span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Game Servers -->
+  <div class="widget-card" x-data="gamesWidget()" x-init="fetchGames()">
+    <div class="widget-title">Game Servers</div>
+    <div class="widget-body">
+      <div x-show="!loaded" class="skeleton">
+        <div class="skeleton-line" style="width:60%"></div>
+        <div class="skeleton-line" style="width:40%"></div>
+      </div>
+      <div x-show="loaded">
+        <div x-show="servers.length === 0" class="widget-empty">No servers configured</div>
+        <template x-for="s in servers" :key="s.id">
+          <div class="server-card" style="margin-bottom:8px;padding:12px">
+            <div class="server-card-header" style="margin-bottom:6px">
+              <div class="server-card-title">
+                <span class="dot" :class="s.running?'dot-green':'dot-red'" style="width:8px;height:8px"></span>
+                <span class="server-card-name" style="font-size:14px" x-text="s.name"></span>
+              </div>
+              <span class="server-card-module" x-text="s.module"></span>
+            </div>
+            <div class="server-card-stats" style="gap:12px;font-size:12px">
+              <span><span class="server-stat-label">Players</span> <strong x-text="s.active_users"></strong></span>
+              <span><span class="server-stat-label">Status</span> <strong :class="s.running?'status-ok':'status-err'" x-text="s.running?'Online':'Offline'"></strong></span>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+document.addEventListener('alpine:init', () => {
+
+  Alpine.data('weatherWidget', () => ({
+    loaded: false, error: false, temp: '', condition: '', humidity: '', wind: '', icon: '',
+    fetchWeather() {
+      fetch('/api/weather').then(r => r.json()).then(r => {
+        const w = r.data || {};
+        this.temp = w.temp !== undefined ? Math.round(w.temp) + '°' : '?';
+        this.condition = w.weather_description || 'Unknown';
+        this.humidity = w.humidity !== undefined ? w.humidity + '%' : '?';
+        this.wind = w.wind_speed !== undefined ? Math.round(w.wind_speed) + ' km/h' : '?';
+        this.icon = w.condition_icon || '';
+        this.loaded = true;
+      }).catch(() => { this.loaded = true; this.error = true; });
+    }
+  }));
+
+  Alpine.data('alertsWidget', () => ({
+    loaded: false, items: [],
+    fetchAlerts() {
+      fetch('/api/alerts').then(r => r.json()).then(r => {
+        const list = Array.isArray(r.data) ? r.data : [];
+        this.items = list.map((a, i) => ({
+          id: i, severity: a.severity || 'info', title: a.title || a.detail || 'Unknown'
+        }));
+        this.loaded = true;
+      }).catch(() => { this.loaded = true; });
+    }
+  }));
+
+  Alpine.data('sysStatsWidget', () => ({
+    loaded: false, cpu: { percent: 0 }, ram: { percent: 0, used_gb: 0, total_gb: 0 },
+    disk: { percent: 0, used_gb: 0, total_gb: 0 }, uptime: '',
+    fetchSysStats() {
+      fetch('/api/overview').then(r => r.json()).then(r => {
+        const sys = (r.data || {}).system || {};
+        this.cpu = { percent: sys.cpu?.percent || 0 };
+        this.ram = { percent: sys.memory?.percent || 0, used_gb: sys.memory?.used_gb || 0, total_gb: sys.memory?.total_gb || 0 };
+        this.disk = { percent: sys.disk?.percent || 0, used_gb: sys.disk?.used_gb || 0, total_gb: sys.disk?.total_gb || 0 };
+        this.uptime = sys.uptime || '';
+        this.loaded = true;
+      }).catch(() => { this.loaded = true; });
+    }
+  }));
+
+  Alpine.data('householdWidget', () => ({
+    loaded: false, homeCount: 0, whoHome: '', temps: [],
+    fetchHousehold() {
+      fetch('/api/overview').then(r => r.json()).then(r => {
+        const ha = (r.data || {}).ha || {};
+        const persons = ha.persons || [];
+        const home = persons.filter(p => p.state === 'home');
+        this.homeCount = home.length;
+        this.whoHome = home.length > 0 ? '— ' + home.map(p => p.name).join(', ') : '';
+        this.temps = ha.temperatures || [];
+        this.loaded = true;
+      }).catch(() => { this.loaded = true; });
+    },
+    tempClass(c) {
+      if (c >= 28) return 'temp-hot';
+      if (c >= 24) return 'temp-warm';
+      if (c >= 18) return 'temp-cool';
+      return 'temp-cold';
+    }
+  }));
+
+  Alpine.data('nzbgetWidget', () => ({
+    loaded: false, speed: '0 B/s', queue: 0, downloads: [],
+    fetchNzbget() {
+      fetch('/api/nzbget').then(r => r.json()).then(r => {
+        const nz = r.data || {};
+        this.speed = nz.download_rate_human || '0 B/s';
+        this.queue = nz.queue_items || 0;
+        this.downloads = (nz.downloads || []).map(d => ({
+          name: d.name || 'Unknown',
+          progress: d.progress || 0,
+        }));
+        this.loaded = true;
+      }).catch(() => { this.loaded = true; });
+    }
+  }));
+
+  Alpine.data('containersWidget', () => ({
+    loaded: false, containers: [], runningCount: 0, totalCount: 0,
+    fetchContainers() {
+      fetch('/api/overview').then(r => r.json()).then(r => {
+        const dkr = (r.data || {}).docker || {};
+        this.containers = dkr.containers || [];
+        this.runningCount = dkr.running || 0;
+        this.totalCount = dkr.total || 0;
+        this.loaded = true;
+      }).catch(() => { this.loaded = true; });
+    }
+  }));
+
+  Alpine.data('arrWidget', () => ({
+    loaded: false, sonarr: { series_count: 0, wanted: 0 }, radarr: { movie_count: 0, missing: 0 },
+    lidarr: { artist_count: 0 }, readarr: { book_count: 0 }, prowlarr: { indexer_count: 0 },
+    fetchArr() {
+      fetch('/api/overview').then(r => r.json()).then(r => {
+        const m = (r.data || {}).media || {};
+        this.sonarr = m.sonarr || { series_count: 0, wanted: 0 };
+        this.radarr = m.radarr || { movie_count: 0, missing: 0 };
+        this.lidarr = m.lidarr || { artist_count: 0 };
+        this.readarr = m.readarr || { book_count: 0 };
+        this.prowlarr = m.prowlarr || { indexer_count: 0 };
+        this.loaded = true;
+      }).catch(() => { this.loaded = true; });
+    }
+  }));
+
+  Alpine.data('gamesWidget', () => ({
+    loaded: false, servers: [],
+    fetchGames() {
+      fetch('/api/overview').then(r => r.json()).then(r => {
+        this.servers = ((r.data || {}).amp || {}).servers || [];
+        this.loaded = true;
+      }).catch(() => { this.loaded = true; });
+    }
+  }));
+
+});
+</script>
+{% endblock %}
