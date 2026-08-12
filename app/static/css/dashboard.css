@@ -54,6 +54,7 @@ body {
   font-size: 13px;
   min-height: 40px;
   flex-shrink: 0;
+  width: 100%;
   transition: all var(--transition);
 }
 
@@ -764,6 +765,7 @@ body {
 /* ── Bottom Status Bar ──────────────────────────────────── */
 
 .status-bar {
+  width: 100%;
   display: flex;
   align-items: center;
   justify-content: space-between;
