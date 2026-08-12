@@ -1,170 +1,186 @@
-"""Project Atlas Command Center v3 — FastAPI backend."""
+import asyncio
+import os
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from jinja2 import Environment, FileSystemLoader, select_autoescape
+
 from config import config
-from services import system, docker, adguard, proxmox, homeassistant, hermes, amp, mediaarr, nzbget, weather, shift, alerts
-
-app = FastAPI(title="Project Atlas Command Center", version="3.0.0")
-
-# CORS — allow all origins (accessed from various devices on LAN)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+from services import (
+    system, docker, adguard, homeassistant, weather, shift,
+    nzbget, amp, mediaarr, hermes, proxmox, alerts, github,
 )
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
+app = FastAPI(title="Atlas Command Center v3", version="3.0.0")
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
-jinja = Environment(
-    loader=FileSystemLoader("templates"),
-    autoescape=select_autoescape(["html", "xml"]),
-)
+# Templates — raw Jinja2 to avoid Jinja2Templates cache issue
+templates_dir = Path(__file__).parent / "templates"
+jinja = Environment(loader=FileSystemLoader(str(templates_dir)), autoescape=select_autoescape(["html", "xml"]))
 
+static_dir = Path(__file__).parent / "static"
+if static_dir.exists():
+    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
 def render(name: str, **kw) -> HTMLResponse:
-    t = jinja.get_template(name)
-    return HTMLResponse(t.render(**kw))
+    return HTMLResponse(jinja.get_template(name).render(**kw))
 
 
-# ── API Routes ───────────────────────────────────────────────────
+# ── Health check ──────────────────────────────────────────────
 
 @app.get("/api/health")
 async def health():
     return {"status": "ok", "version": "3.0.0"}
 
 
-@app.get("/api/system")
-async def api_system():
-    return {"data": system.get_system_stats()}
-
-
-@app.get("/api/docker")
-async def api_docker():
-    return {"data": await docker.container_stats()}
-
-
-@app.get("/api/homeassistant")
-async def api_ha():
-    return {"data": await homeassistant.ha_stats()}
-
-
-@app.get("/api/proxmox")
-async def api_proxmox():
-    return {"data": await proxmox.proxmox_stats()}
-
-
-@app.get("/api/adguard")
-async def api_adguard():
-    return {"data": await adguard.adguard_stats()}
-
-
-@app.get("/api/adguard/recent")
-async def api_adguard_recent():
-    return {"data": await adguard.adguard_recent()}
-
-
-@app.get("/api/arr")
-async def api_arr():
-    return {"data": await mediaarr.all_arr_stats()}
-
-
-@app.get("/api/amp")
-async def api_amp():
-    return {"data": await amp.get_status()}
-
-
-@app.get("/api/nzbget")
-async def api_nzbget():
-    return {"data": await nzbget.nzbget_stats()}
-
-
-@app.get("/api/hermes")
-async def api_hermes():
-    return {"data": await hermes.hermes_stats()}
-
-
-@app.get("/api/weather")
-async def api_weather():
-    return {"data": await weather.get_weather()}
-
-
-@app.get("/api/shift")
-async def api_shift():
-    return {"data": shift.get_today_shift()}
-
-
-@app.get("/api/alerts")
-async def api_alerts():
-    return {"data": await alerts.get_alerts()}
-
+# ── Overview ──────────────────────────────────────────────────
 
 @app.get("/api/overview")
 async def overview():
-    """Aggregate all services into one response."""
     import asyncio
-
-    sys_data = system.get_system_stats()
-    dkr_data = await docker.container_stats()
-    ha_data = await homeassistant.ha_stats()
-    px_data = await proxmox.proxmox_stats()
-    ag_data = await adguard.adguard_stats()
-    arr_data = await mediaarr.all_arr_stats()
-    am_data = await amp.get_status()
-    hm_data = await hermes.hermes_stats()
-    nz_data = await nzbget.nzbget_stats()
-    wx_data = await weather.get_weather()
-    sh_data = shift.get_today_shift()
-    al_data = await alerts.get_alerts()
-
-    return {
-        "data": {
-            "system": sys_data,
-            "docker": dkr_data,
-            "ha": ha_data,
-            "proxmox": px_data,
-            "adguard": ag_data,
-            "media": arr_data,
-            "amp": am_data,
-            "hermes": hm_data,
-            "nzbget": nz_data,
-            "weather": wx_data,
-            "shift": sh_data,
-            "alerts": al_data,
-        }
+    tasks = {
+        "system": system.get_system_stats(),
+        "docker": docker.container_stats(),
+        "ha": homeassistant.ha_stats(),
+        "adguard": adguard.adguard_stats(),
+        "weather": weather.get_weather(),
+        "shift": shift.get_today_shift(),
+        "nzbget": nzbget.nzbget_stats(),
+        "amp": amp.get_status(),
+        "media": mediaarr.all_arr_stats(),
+        "hermes": hermes.hermes_stats(),
+        "proxmox": proxmox.proxmox_stats(),
     }
+    results = {}
+    for name, task in tasks.items():
+        try:
+            results[name] = await task
+        except Exception as e:
+            results[name] = {"error": str(e)}
+    return results
 
 
-# ── Page Routes ──────────────────────────────────────────────────
+# ── Individual API endpoints ──────────────────────────────────
 
-@app.get("/", response_class=HTMLResponse)
+@app.get("/api/system")
+async def api_system():
+    return system.get_system_stats()
+
+@app.get("/api/docker")
+async def api_docker():
+    return await docker.container_stats()
+
+@app.get("/api/homeassistant")
+async def api_ha():
+    return await homeassistant.ha_stats()
+
+@app.get("/api/adguard")
+async def api_adguard():
+    return await adguard.adguard_stats()
+
+@app.get("/api/adguard/recent")
+async def api_adguard_recent():
+    return await adguard.adguard_recent()
+
+@app.get("/api/weather")
+async def api_weather():
+    return await weather.get_weather()
+
+@app.get("/api/shift")
+async def api_shift():
+    return shift.get_today_shift()
+
+@app.get("/api/nzbget")
+async def api_nzbget():
+    return await nzbget.nzbget_stats()
+
+@app.get("/api/amp")
+async def api_amp():
+    return await amp.get_status()
+
+@app.get("/api/arr")
+async def api_arr():
+    return await mediaarr.all_arr_stats()
+
+@app.get("/api/hermes")
+async def api_hermes():
+    return await hermes.hermes_stats()
+
+@app.get("/api/proxmox")
+async def api_proxmox():
+    return await proxmox.proxmox_stats()
+
+@app.get("/api/alerts")
+async def api_alerts():
+    return await alerts.get_alerts()
+
+
+# ── GitHub API endpoints ──────────────────────────────────────
+
+@app.get("/api/github")
+async def api_github_overview():
+    return await github.get_overview()
+
+@app.get("/api/github/prs")
+async def api_github_prs(repo: str = "AlexBucket/atlas-config"):
+    return await github.get_prs(repo)
+
+@app.get("/api/github/issues")
+async def api_github_issues(repo: str = "AlexBucket/atlas-config"):
+    return await github.get_issues(repo)
+
+@app.get("/api/github/commits")
+async def api_github_commits(repo: str = "AlexBucket/atlas-config"):
+    return await github.get_commits(repo)
+
+@app.get("/api/github/workflows")
+async def api_github_workflows(repo: str = "AlexBucket/atlas-config"):
+    return await github.get_workflows(repo)
+
+@app.post("/api/github/pr/{repo}/{pr_number}/approve")
+async def api_github_approve_pr(repo: str, pr_number: int):
+    full_repo = f"AlexBucket/{repo}" if "/" not in repo else repo
+    return await github.approve_pr(full_repo, pr_number)
+
+@app.post("/api/github/workflows/{repo}/{run_id}/rerun")
+async def api_github_rerun_workflow(repo: str, run_id: int):
+    full_repo = f"AlexBucket/{repo}" if "/" not in repo else repo
+    return await github.rerun_workflow(full_repo, run_id)
+
+
+# ── Page routes ───────────────────────────────────────────────
+
+@app.get("/")
 async def index():
-    return render("index.html", page="overview")
+    return render("index.html")
+
+@app.get("/infra")
+async def infra_page():
+    return render("infra.html")
+
+@app.get("/media")
+async def media_page():
+    return render("media.html")
+
+@app.get("/network")
+async def network_page():
+    return render("network.html")
+
+@app.get("/games")
+async def games_page():
+    return render("games.html")
+
+@app.get("/github")
+async def github_page():
+    return render("github.html")
 
 
-@app.get("/infra", response_class=HTMLResponse)
-async def infra():
-    return render("infra.html", page="infra")
-
-
-@app.get("/media", response_class=HTMLResponse)
-async def media():
-    return render("media.html", page="media")
-
-
-@app.get("/network", response_class=HTMLResponse)
-async def network():
-    return render("network.html", page="network")
-
-
-@app.get("/games", response_class=HTMLResponse)
-async def games():
-    return render("games.html", page="games")
+@app.get("/ping")
+async def ping():
+    return {"ping": "pong"}
 
 
 if __name__ == "__main__":
