@@ -11,7 +11,7 @@ from jinja2 import Environment, FileSystemLoader, select_autoescape
 from config import config
 from services import (
     system, docker, adguard, homeassistant, weather, shift,
-    nzbget, amp, mediaarr, hermes, proxmox, alerts, github,
+    nzbget, amp, mediaarr, hermes, proxmox, alerts, github, intelligence,
 )
 
 app = FastAPI(title="Atlas Command Center v3", version="3.0.0")
@@ -176,6 +176,38 @@ async def games_page():
 @app.get("/github")
 async def github_page():
     return render("github.html")
+
+
+# ── Intelligence API endpoints ────────────────────────────────
+
+@app.get("/api/intelligence")
+async def api_intelligence_stats():
+    return intelligence.get_stats()
+
+@app.get("/api/intelligence/graph")
+async def api_intelligence_graph():
+    return intelligence.get_graph()
+
+@app.get("/api/intelligence/tags")
+async def api_intelligence_tags():
+    return intelligence.get_tags()
+
+@app.get("/api/intelligence/timeline")
+async def api_intelligence_timeline():
+    return intelligence.get_timeline()
+
+@app.get("/api/intelligence/recent")
+async def api_intelligence_recent():
+    return intelligence.get_recent()
+
+@app.get("/api/intelligence/note")
+async def api_intelligence_note(path: str = ""):
+    return intelligence.get_note(path)
+
+
+@app.get("/intelligence")
+async def intelligence_page():
+    return render("intelligence.html")
 
 
 @app.get("/ping")

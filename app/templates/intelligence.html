@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+{% block title %}Atlas v3 — Intelligence{% endblock %}
+
+{% block content %}
+<div class="page-title">Intelligence</div>
+<div class="page-subtitle">Obsidian vault — notes, connections, tags, and activity</div>
+
+<div class="widget-grid">
+
+  <!-- Stats cards -->
+  <div class="widget-card" x-data="intelStats()" x-init="fetchStats()">
+    <div class="widget-title">Vault</div>
+    <div class="widget-body">
+      <div x-show="!loaded" class="skeleton">
+        <div class="skeleton-line" style="width:50%"></div>
+        <div class="skeleton-line" style="width:30%"></div>
+      </div>
+      <div x-show="loaded">
+        <div class="compact-stat"><span class="compact-stat-label">Notes</span><span class="compact-stat-value" x-text="total_notes"></span></div>
+        <div class="compact-stat"><span class="compact-stat-label">Words</span><span class="compact-stat-value" x-text="total_words?.toLocaleString()"></span></div>
+        <div class="compact-stat"><span class="compact-stat-label">Avg words/note</span><span class="compact-stat-value" x-text="avg_words"></span></div>
+        <div class="compact-stat"><span class="compact-stat-label">Wiki-links</span><span class="compact-stat-value" x-text="total_links"></span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Tags -->
+  <div class="widget-card" x-data="intelTags()" x-init="fetchTags()">
+    <div class="widget-title">Tags</div>
+    <div class="widget-body">
+      <div x-show="!loaded" class="skeleton">
+        <div class="skeleton-line" style="width:70%"></div>
+        <div class="skeleton-line" style="width:50%"></div>
+      </div>
+      <div x-show="loaded && tags.length === 0" class="widget-empty">No tags</div>
+      <div x-show="loaded" style="display:flex;flex-wrap:wrap;gap:4px">
+        <template x-for="t in tags.slice(0,25)" :key="t.tag">
+          <span style="font-size:11px;padding:2px 8px;border-radius:99px;background:var(--bg-hover);color:var(--accent-cyan);border:1px solid var(--border)" x-text="t.tag + ' (' + t.count + ')'"></span>
+        </template>
+      </div>
+    </div>
+  </div>
+
+  <!-- Timeline -->
+  <div class="widget-card" x-data="intelTimeline()" x-init="fetchTimeline()">
+    <div class="widget-title">Timeline</div>
+    <div class="widget-body">
+      <div x-show="!loaded" class="skeleton">
+        <div class="skeleton-line" style="width:80%"></div>
+      </div>
+      <div x-show="loaded && timeline.length === 0" class="widget-empty">No data</div>
+      <div x-show="loaded" style="display:flex;flex-direction:column;gap:3px">
+        <template x-for="m in timeline" :key="m.month">
+          <div style="display:flex;align-items:center;gap:6px;font-size:11px">
+            <span style="min-width:60px;color:var(--text-muted)" x-text="m.month"></span>
+            <div style="flex:1;height:14px;background:var(--border);border-radius:99px;overflow:hidden">
+              <div style="height:100%;background:var(--accent-blue);border-radius:99px" :style="'width:'+Math.max(5, (m.count/maxCount)*100)+'%'"></div>
+            </div>
+            <span style="min-width:24px;text-align:right;color:var(--text-secondary)" x-text="m.count"></span>
+          </div>
+        </template>
+      </div>
+    </div>
+  </div>
+
+  <!-- Note Graph -->
+  <div class="widget-card widget-wide" x-data="intelGraph()" x-init="fetchGraph()">
+    <div class="widget-title">Graph <span style="font-size:11px;color:var(--text-muted);font-weight:400" x-text="'('+total_notes+' nodes, '+total_connections+' edges)'"></span></div>
+    <div class="widget-body">
+      <div x-show="!loaded" class="skeleton">
+        <div class="skeleton-line" style="width:90%;height:200px"></div>
+      </div>
+      <div x-show="loaded" id="note-graph" style="width:100%;height:400px;background:var(--bg-secondary);border-radius:var(--radius-md);border:1px solid var(--border)"></div>
+    </div>
+  </div>
+
+  <!-- Recent Notes -->
+  <div class="widget-card widget-wide" x-data="intelRecent()" x-init="fetchRecent()">
+    <div class="widget-title">Recently Modified</div>
+    <div class="widget-body">
+      <div x-show="!loaded" class="skeleton">
+        <div class="skeleton-line" style="width:80%"></div>
+        <div class="skeleton-line" style="width:70%"></div>
+        <div class="skeleton-line" style="width:60%"></div>
+      </div>
+      <div x-show="loaded && notes.length === 0" class="widget-empty">No notes</div>
+      <template x-for="n in notes" :key="n.path">
+        <div class="activity-item" style="padding:6px 0;font-size:11px">
+          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" x-text="n.title"></span>
+          <span style="color:var(--text-muted);font-size:10px;min-width:80px;text-align:right" x-text="n.modified?.substring(0,10)"></span>
+        </div>
+      </template>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+<script>
+document.addEventListener('alpine:init', () => {
+
+  Alpine.data('intelStats', () => ({
+    loaded: false, total_notes: 0, total_words: 0, avg_words: 0, total_links: 0,
+    fetchStats() {
+      fetch('/api/intelligence').then(r => r.json()).then(r => {
+        this.total_notes = r.total_notes || 0;
+        this.total_words = r.total_words || 0;
+        this.avg_words = r.avg_words || 0;
+        this.total_links = r.total_links || 0;
+        this.loaded = true;
+      }).catch(() => { this.loaded = true; });
+    }
+  }));
+
+  Alpine.data('intelTags', () => ({
+    loaded: false, tags: [],
+    fetchTags() {
+      fetch('/api/intelligence/tags').then(r => r.json()).then(r => {
+        this.tags = r.tag_cloud || [];
+        this.loaded = true;
+      }).catch(() => { this.loaded = true; });
+    }
+  }));
+
+  Alpine.data('intelTimeline', () => ({
+    loaded: false, timeline: [], maxCount: 1,
+    fetchTimeline() {
+      fetch('/api/intelligence/timeline').then(r => r.json()).then(r => {
+        this.timeline = r.timeline || [];
+        this.maxCount = Math.max(1, ...this.timeline.map(m => m.count));
+        this.loaded = true;
+      }).catch(() => { this.loaded = true; });
+    }
+  }));
+
+  Alpine.data('intelGraph', () => ({
+    loaded: false, total_notes: 0, total_connections: 0,
+    fetchGraph() {
+      fetch('/api/intelligence/graph').then(r => r.json()).then(r => {
+        this.total_notes = r.total_notes || 0;
+        this.total_connections = r.total_connections || 0;
+        this.loaded = true;
+        this.$nextTick(() => this.renderGraph(r));
+      }).catch(() => { this.loaded = true; });
+    },
+    renderGraph(data) {
+      const el = document.getElementById('note-graph');
+      if (!el || !data.nodes) return;
+      const nodes = new vis.DataSet(data.nodes.map(n => ({
+        id: n.id, label: n.label, title: n.title,
+        group: n.group, size: n.size || 15,
+        font: { size: 10, color: '#e8e8f0' },
+        borderWidth: 1,
+        color: { background: '#7aa2f7', border: '#2a2a3e', highlight: { background: '#bb9af7', border: '#7aa2f7' } },
+      })));
+      const edges = new vis.DataSet((data.edges || []).map(e => ({
+        from: e.from, to: e.to,
+        color: { color: '#3a3a50', highlight: '#7aa2f7' },
+        width: 1,
+      })));
+      new vis.Network(el, { nodes, edges }, {
+        physics: { solver: 'forceAtlas2Based', stabilization: { iterations: 100 } },
+        interaction: { hover: true, tooltipDelay: 200 },
+        groups: { root: { color: { background: '#7dcfff' } } },
+      });
+    }
+  }));
+
+  Alpine.data('intelRecent', () => ({
+    loaded: false, notes: [],
+    fetchRecent() {
+      fetch('/api/intelligence/recent').then(r => r.json()).then(r => {
+        this.notes = r.notes || [];
+        this.loaded = true;
+      }).catch(() => { this.loaded = true; });
+    }
+  }));
+
+});
+</script>
+{% endblock %}
