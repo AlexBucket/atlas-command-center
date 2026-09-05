@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}Atlas{% endblock %} — vNext</title>
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<link rel="stylesheet" href="/static/css/vnext.css">
+<script defer src="/static/js/alpine.min.js"></script>
+</head>
+<body x-data="shellState()" x-init="initShell()">
+
+<!-- ═══ TOP BAR ═══ -->
+<div class="topbar">
+  <div class="topbar-shift" :class="'topbar-shift-' + (shift.css || 'off')">
+    <span class="topbar-shift-icon" x-text="shift.icon || '💤'"></span>
+    <span x-text="shift.label || 'Connecting…'"></span>
+  </div>
+
+  <div class="topbar-health">
+    <span class="topbar-health-dot" :class="health.level || 'checking'"></span>
+    <span class="topbar-health-text" :class="health.level || 'checking'" x-text="health.message || 'Connecting…'"></span>
+  </div>
+
+  <div class="topbar-quicklinks">
+    <a href="https://paperless.media.alexbucket.com" target="_blank" class="ql-pill">Paperless</a>
+    <a href="https://immich.media.alexbucket.com" target="_blank" class="ql-pill">Immich</a>
+  </div>
+
+  <div class="topbar-right">
+    <div class="topbar-alarm" x-show="shift.alarm_time">
+      <span>⏰</span>
+      <span x-text="shift.alarm_time"></span>
+    </div>
+    <span class="topbar-time" x-data="{ t:'' }" x-init="t = new Date().toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })" x-text="t"></span>
+  </div>
+</div>
+
+<!-- ═══ SIDEBAR ═══ -->
+<nav class="sidebar" id="sidebar">
+  <div class="sidebar-brand">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+    Atlas <span>vNext</span>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-section-title">Pages</div>
+    <a href="/vnext/" class="nav-item {% if page == 'overview' %}active{% endif %}">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+      Overview
+    </a>
+    <a href="/vnext/infra" class="nav-item {% if page == 'infra' %}active{% endif %}">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1"/><circle cx="6" cy="18" r="1"/></svg>
+      Infrastructure
+    </a>
+    <a href="/vnext/briefings" class="nav-item {% if page == 'briefings' %}active{% endif %}">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      Briefings
+    </a>
+  </div>
+
+  <div class="nav-section">
+    <div class="nav-section-title">Services</div>
+    <a href="https://paperless.media.alexbucket.com" target="_blank" class="nav-item nav-item-ext">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+      Paperless
+    </a>
+    <a href="https://immich.media.alexbucket.com" target="_blank" class="nav-item nav-item-ext">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><rect x="2" y="3" width="20" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="M21 15l-5-5L5 21"/></svg>
+      Immich
+    </a>
+  </div>
+
+  <div class="sidebar-footer">
+    <span class="sidebar-footer-dot" :style="'background:' + (health.level === 'healthy' ? 'var(--green)' : health.level === 'degraded' ? 'var(--amber)' : health.level === 'critical' ? 'var(--red)' : 'var(--text4)')"></span>
+    vNext
+  </div>
+</nav>
+
+<!-- ═══ MAIN ═══ -->
+<main class="main">
+  {% block content %}{% endblock %}
+</main>
+
+<!-- ═══ SCRIPTS ═══ -->
+<script>
+document.addEventListener('alpine:init', () => {
+
+  // ── Shell State: shared across all vNext pages ────────────
+  // Owns the topbar and sidebar data. Every page gets this for free.
+  Alpine.data('shellState', () => ({
+    shift: { css: 'off', icon: '💤', label: 'Connecting…', alarm_time: '' },
+    health: { level: 'checking', message: 'Connecting…' },
+    loaded: false,
+
+    initShell() {
+      this.fetchShell();
+      // Re-fetch every 60 seconds to keep topbar current
+      setInterval(() => this.fetchShell(), 60000);
+    },
+
+    fetchShell() {
+      fetch('/vnext/api/overview')
+        .then(r => r.json())
+        .then(r => {
+          const d = r.data || {};
+          const h = r.health || { level: 'checking', ok: 0, total: 0, errors: 0 };
+
+          // Shift
+          const sd = d.shift?.data;
+          if (sd) {
+            const icon = sd.shift === 'Night' ? '🌙' : sd.shift === 'Day' ? '☀️' : '💤';
+            this.shift = {
+              shift: sd.shift,
+              icon: icon,
+              css: (sd.shift || 'off').toLowerCase(),
+              label: sd.detail || (sd.shift + ' Shift'),
+              alarm_time: sd.alarm_time || '',
+            };
+          }
+
+          // Health
+          let msg = 'Connecting…';
+          if (h.level === 'healthy') msg = 'All systems nominal';
+          else if (h.level === 'degraded') msg = h.errors + ' service(s) degraded';
+          else if (h.level === 'critical') msg = '⚠ Critical services degraded';
+          else if (h.level === 'offline') msg = '⚠ Dashboard offline';
+          this.health = { level: h.level, message: msg, ok: h.ok, total: h.total };
+
+          this.loaded = true;
+        })
+        .catch(() => {
+          this.health = { level: 'offline', message: '⚠ Dashboard offline', ok: 0, total: 0 };
+        });
+    },
+  }));
+
+});
+</script>
+
+</body>
+</html>

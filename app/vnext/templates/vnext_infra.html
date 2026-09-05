@@ -1,0 +1,167 @@
+{% extends "vnext_base.html" %}
+{% block title %}Atlas vNext — Infrastructure{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-title">Infrastructure</div>
+  <div class="page-subtitle">Proxmox host, VMs, LXCs, and Docker containers</div>
+</div>
+
+<div x-data="infraWidget()" x-init="fetchInfra()">
+
+  <!-- ═══ Proxmox Host ═══ -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-title">Proxmox Host</div>
+    </div>
+
+    <div x-show="!infraLoaded" class="sk"><div class="sk-l" style="width:40%"></div><div class="sk-l" style="width:60%"></div><div class="sk-l" style="width:30%"></div></div>
+
+    <div x-show="proxmox.status === 'error'" class="infra-card">
+      <div class="infra-card-status">⚠ Proxmox unreachable</div>
+    </div>
+
+    <div x-show="infraLoaded && proxmox.status === 'ok' && !proxmox.data.configured" class="infra-card">
+      <div class="infra-card-status">⚠ Proxmox not configured</div>
+    </div>
+
+    <div x-show="infraLoaded && proxmox.status === 'ok' && proxmox.data.configured" class="stats-row">
+      <div class="stat-box">
+        <div class="stat-box-label">CPU</div>
+        <div class="stat-box-value" x-text="proxmox.data.node.cpu_percent + '%'"></div>
+        <div class="stat-box-sub" x-text="proxmox.data.node.cpu_count + ' cores'"></div>
+        <div class="stat-bar"><div class="stat-bar-fill stat-bar-cyan" :style="'width:'+proxmox.data.node.cpu_percent+'%'"></div></div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-box-label">Memory</div>
+        <div class="stat-box-value" x-text="proxmox.data.node.memory_percent + '%'"></div>
+        <div class="stat-box-sub" x-text="proxmox.data.node.memory_used_gb + ' / ' + proxmox.data.node.memory_total_gb + ' GB'"></div>
+        <div class="stat-bar"><div class="stat-bar-fill stat-bar-purple" :style="'width:'+proxmox.data.node.memory_percent+'%'"></div></div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-box-label">Uptime</div>
+        <div class="stat-box-value" style="font-size:18px" x-text="proxmoxUptime()"></div>
+        <div class="stat-box-sub" x-text="proxmox.data.node.hostname"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ VMs and LXCs ═══ -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-title">Virtual Machines</div>
+      <span class="section-badge" x-show="infraLoaded && proxmox.status === 'ok'" x-text="(proxmox.data.vms || []).length + ' VMs'"></span>
+    </div>
+    <div x-show="infraLoaded && proxmox.status === 'ok' && (proxmox.data.vms || []).length === 0" class="infra-card"><div class="infra-card-empty">No VMs</div></div>
+    <div x-show="!infraLoaded" class="sk"><div class="sk-l" style="width:70%"></div></div>
+    <div x-show="infraLoaded && proxmox.status === 'ok'" class="host-grid">
+      <template x-for="vm in (proxmox.data.vms || [])" :key="vm.vmid">
+        <div class="host-item" :class="vm.status === 'running' ? 'host-running' : 'host-stopped'">
+          <span class="host-dot" :class="vm.status === 'running' ? 'dot-green' : 'dot-red'"></span>
+          <span class="host-name" x-text="vm.name"></span>
+          <span class="host-id" x-text="'ID: ' + vm.vmid"></span>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <div class="section">
+    <div class="section-header">
+      <div class="section-title">LXCs</div>
+      <span class="section-badge" x-show="infraLoaded && proxmox.status === 'ok'" x-text="(proxmox.data.containers || []).length + ' containers'"></span>
+    </div>
+    <div x-show="infraLoaded && proxmox.status === 'ok' && (proxmox.data.containers || []).length === 0" class="infra-card"><div class="infra-card-empty">No LXCs</div></div>
+    <div x-show="!infraLoaded" class="sk"><div class="sk-l" style="width:70%"></div></div>
+    <div x-show="infraLoaded && proxmox.status === 'ok'" class="host-grid">
+      <template x-for="ct in (proxmox.data.containers || [])" :key="ct.vmid">
+        <div class="host-item" :class="ct.status === 'running' ? 'host-running' : 'host-stopped'">
+          <span class="host-dot" :class="ct.status === 'running' ? 'dot-green' : 'dot-red'"></span>
+          <span class="host-name" x-text="ct.name"></span>
+          <span class="host-id" x-text="'ID: ' + ct.vmid"></span>
+        </div>
+      </template>
+    </div>
+  </div>
+
+  <!-- ═══ Docker Containers ═══ -->
+  <div class="section">
+    <div class="section-header">
+      <div class="section-title">Docker Containers</div>
+      <span class="section-badge" x-show="infraLoaded && docker.status === 'ok'" x-text="docker.data.running + ' / ' + docker.data.total + ' running'"></span>
+    </div>
+
+    <div x-show="!infraLoaded" class="sk"><div class="sk-l" style="width:90%"></div><div class="sk-l" style="width:70%"></div></div>
+    <div x-show="docker.status === 'error'" class="infra-card"><div class="infra-card-status">⚠ Docker data unavailable</div></div>
+
+    <div x-show="infraLoaded && docker.status === 'ok'">
+
+      <!-- Running -->
+      <div class="section-subheader">Running</div>
+      <div x-show="dockerRunning().length === 0" class="infra-card"><div class="infra-card-empty">No running containers</div></div>
+      <div class="container-grid">
+        <template x-for="c in dockerRunning()" :key="c.name">
+          <a :href="'https://'+c.name+'.media.alexbucket.com'" target="_blank"
+             class="container-pill pill-green">
+            <span class="pill-dot"></span>
+            <span x-text="c.name"></span>
+          </a>
+        </template>
+      </div>
+
+      <!-- Stopped -->
+      <div x-show="dockerStopped().length > 0">
+        <div class="section-subheader" style="color:var(--red);margin-top:12px">Stopped</div>
+        <div class="container-grid">
+          <template x-for="c in dockerStopped()" :key="c.name">
+            <div class="container-pill pill-red" style="cursor:default">
+              <span class="pill-dot"></span>
+              <span x-text="c.name"></span>
+            </div>
+          </template>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+
+<script>
+document.addEventListener('alpine:init', () => {
+
+  Alpine.data('infraWidget', () => ({
+    infraLoaded: false,
+    proxmox: { status: 'loading', data: null },
+    docker: { status: 'loading', data: null },
+
+    fetchInfra() {
+      fetch('/vnext/api/overview')
+        .then(r => r.json())
+        .then(r => {
+          const d = r.data || {};
+          this.proxmox = d.proxmox || { status: 'error', data: null };
+          this.docker = d.docker || { status: 'error', data: null };
+          this.infraLoaded = true;
+        })
+        .catch(() => { this.infraLoaded = true; });
+    },
+
+    proxmoxUptime() {
+      const sec = this.proxmox?.data?.node?.uptime || 0;
+      const d = Math.floor(sec / 86400);
+      const h = Math.floor((sec % 86400) / 3600);
+      return d + 'd ' + h + 'h';
+    },
+
+    dockerRunning() {
+      return (this.docker?.data?.containers || []).filter(c => c.state === 'running');
+    },
+
+    dockerStopped() {
+      return (this.docker?.data?.containers || []).filter(c => c.state !== 'running');
+    },
+  }));
+
+});
+</script>
+{% endblock %}

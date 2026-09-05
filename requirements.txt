@@ -4,3 +4,4 @@ jinja2
 aiohttp
 psutil
 python-multipart
+httpx

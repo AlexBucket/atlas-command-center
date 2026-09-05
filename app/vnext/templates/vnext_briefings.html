@@ -1,0 +1,316 @@
+{% extends "vnext_base.html" %}
+{% block title %}Briefings — Atlas vNext{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div class="page-title">Briefings</div>
+  <div class="page-header-meta">
+    <span class="page-context">Daily digests from Hermes cron</span>
+    <span class="page-sep"></span>
+    <button class="btn btn-sm" @click="fetchBriefings()">↻ Refresh</button>
+  </div>
+</div>
+
+<div x-data="briefingsWidget()" x-init="fetchBriefings()">
+
+  <!-- Loading -->
+  <div x-show="!loaded" class="panel" style="padding:40px;text-align:center;color:var(--text3)">
+    Loading briefings…
+  </div>
+
+  <!-- Empty -->
+  <div x-show="loaded && briefings.length === 0" class="panel" style="padding:40px;text-align:center;color:var(--text3)">
+    No briefings available yet. They'll appear here once the cron jobs run.
+  </div>
+
+  <!-- Side-by-side: list + reader -->
+  <div x-show="loaded && briefings.length > 0" class="briefings-layout">
+
+    <!-- Left: timeline list -->
+    <div class="briefings-list">
+      <template x-for="(b, i) in briefings" :key="b.generated_at">
+        <div class="briefing-entry"
+             :class="{ 'briefing-active': selectedIndex === i }"
+             @click="selectBriefing(i)">
+          <div class="briefing-entry-icon" x-text="b.type === 'morning' ? '🌅' : '🌙'"></div>
+          <div class="briefing-entry-body">
+            <div class="briefing-entry-date" x-text="formatDate(b.date)"></div>
+            <div class="briefing-entry-type" x-text="b.type === 'morning' ? 'Morning Briefing' : 'Evening Debrief'"></div>
+            <div class="briefing-entry-time" x-text="formatTime(b.generated_at)"></div>
+          </div>
+        </div>
+      </template>
+    </div>
+
+    <!-- Right: selected briefing reader -->
+    <div class="briefings-reader" x-show="selectedBriefing">
+      <div class="briefings-reader-header">
+        <div>
+          <div class="reader-type" x-text="selectedBriefing.type === 'morning' ? '🌅 Morning Briefing' : '🌙 Evening Debrief'"></div>
+          <div class="reader-date" x-text="formatDate(selectedBriefing.date)"></div>
+        </div>
+        <div class="reader-nav">
+          <button class="btn btn-sm" :disabled="selectedIndex <= 0" @click="prevBriefing()">‹ Prev</button>
+          <button class="btn btn-sm" :disabled="selectedIndex >= briefings.length - 1" @click="nextBriefing()">Next ›</button>
+        </div>
+      </div>
+
+      <div class="reader-body">
+        <div class="reader-summary" x-html="renderMarkdown(selectedBriefing.summary || 'No summary content.')"></div>
+
+        <template x-if="selectedBriefing.tasks && selectedBriefing.tasks.length > 0">
+          <div class="reader-section">
+            <h3>📋 Tasks</h3>
+            <ul>
+              <template x-for="task in selectedBriefing.tasks" :key="task">
+                <li x-text="task"></li>
+              </template>
+            </ul>
+          </div>
+        </template>
+
+        <template x-if="selectedBriefing.achievements && selectedBriefing.achievements.length > 0">
+          <div class="reader-section">
+            <h3>✅ Achievements</h3>
+            <ul>
+              <template x-for="a in selectedBriefing.achievements" :key="a">
+                <li x-text="a"></li>
+              </template>
+            </ul>
+          </div>
+        </template>
+
+        <template x-if="selectedBriefing.rollover && selectedBriefing.rollover.length > 0">
+          <div class="reader-section">
+            <h3>📋 Rollover</h3>
+            <ul>
+              <template x-for="r in selectedBriefing.rollover" :key="r">
+                <li x-text="r"></li>
+              </template>
+            </ul>
+          </div>
+        </template>
+
+        <div class="reader-meta">
+          Generated at <span x-text="formatTime(selectedBriefing.generated_at)"></span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+
+<style>
+.briefings-layout {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+.briefings-list {
+  width: 240px;
+  flex-shrink: 0;
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+  padding-right: 16px;
+}
+.briefing-entry {
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+  margin-bottom: 4px;
+}
+.briefing-entry:hover {
+  background: var(--hover);
+}
+.briefing-entry.briefing-active {
+  background: var(--accent-bg);
+  border: 1px solid var(--accent);
+}
+.briefing-entry-icon {
+  font-size: 20px;
+  line-height: 1.4;
+}
+.briefing-entry-body {
+  display: flex;
+  flex-direction: column;
+}
+.briefing-entry-date {
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--text1);
+}
+.briefing-entry-type {
+  font-size: 11px;
+  color: var(--text3);
+}
+.briefing-entry-time {
+  font-size: 10px;
+  color: var(--text4);
+  margin-top: 2px;
+}
+.briefings-reader {
+  flex: 1;
+  max-height: calc(100vh - 200px);
+  overflow-y: auto;
+}
+.briefings-reader-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.reader-type {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text1);
+}
+.reader-date {
+  font-size: 13px;
+  color: var(--text3);
+  margin-top: 2px;
+}
+.reader-nav {
+  display: flex;
+  gap: 6px;
+}
+.reader-body {
+  padding: 0 4px;
+}
+.reader-summary {
+  line-height: 1.7;
+  color: var(--text1);
+  font-size: 14px;
+}
+.reader-summary p {
+  margin-bottom: 10px;
+}
+.reader-summary strong {
+  color: var(--accent);
+}
+.reader-section {
+  margin-top: 24px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+}
+.reader-section h3 {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 8px;
+  color: var(--text1);
+}
+.reader-section ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text2);
+  font-size: 13px;
+}
+.reader-section li {
+  margin-bottom: 4px;
+}
+.reader-meta {
+  margin-top: 24px;
+  font-size: 11px;
+  color: var(--text4);
+  text-align: right;
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+.btn {
+  background: var(--bg2);
+  color: var(--text1);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.btn:hover {
+  background: var(--hover);
+  border-color: var(--accent);
+}
+.btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.btn-sm {
+  padding: 4px 10px;
+  font-size: 11px;
+}
+</style>
+
+<script>
+document.addEventListener('alpine:init', () => {
+  Alpine.data('briefingsWidget', () => ({
+    loaded: false,
+    briefings: [],
+    selectedIndex: 0,
+
+    get selectedBriefing() {
+      if (this.briefings.length === 0) return null;
+      if (this.selectedIndex < 0 || this.selectedIndex >= this.briefings.length) return null;
+      return this.briefings[this.selectedIndex];
+    },
+
+    fetchBriefings() {
+      fetch('/api/summary/history')
+        .then(r => r.json())
+        .then(r => {
+          this.briefings = r.briefings || [];
+          this.selectedIndex = 0;
+          this.loaded = true;
+        })
+        .catch(() => {
+          this.loaded = true;
+        });
+    },
+
+    selectBriefing(i) {
+      this.selectedIndex = i;
+    },
+
+    prevBriefing() {
+      if (this.selectedIndex > 0) this.selectedIndex--;
+    },
+
+    nextBriefing() {
+      if (this.selectedIndex < this.briefings.length - 1) this.selectedIndex++;
+    },
+
+    formatDate(dateStr) {
+      if (!dateStr) return '';
+      const d = new Date(dateStr + 'T00:00:00');
+      return d.toLocaleDateString('en-AU', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+    },
+
+    formatTime(iso) {
+      if (!iso) return '';
+      const d = new Date(iso);
+      return d.toLocaleString('en-AU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    },
+
+    renderMarkdown(text) {
+      if (!text) return '';
+      // Simple markdown-to-HTML: line breaks, bold, lists
+      let html = text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/^\- (.+)$/gm, '• $1')
+        .replace(/\n\n/g, '</p><p>')
+        .replace(/\n/g, '<br>');
+      return '<p>' + html + '</p>';
+    },
+  }));
+});
+</script>
+
+{% endblock %}

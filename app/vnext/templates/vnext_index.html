@@ -1,0 +1,290 @@
+{% extends "vnext_base.html" %}
+{% block title %}Atlas vNext - Command Center{% endblock %}
+{% block content %}
+
+<div class="page-header">
+  <div class="page-title">Command Center</div>
+  <div class="page-header-meta">
+    <span class="page-context">Atlas Environment</span>
+    <span class="page-sep"></span>
+    <span class="page-date" x-data="{ dt:'' }" x-init="dt = new Date().toLocaleDateString('en-AU', { weekday:'long', day:'numeric', month:'long', year:'numeric' })"> <span x-text="dt"></span></span>
+  </div>
+</div>
+
+<div x-data="overviewWidget()" x-init="fetchOverview()">
+
+  <!-- Alert Banner -->
+  <div class="alert-banner" :class="'alert-' + (health.level || 'checking')" x-show="loaded">
+    <div class="alert-main">
+      <strong x-text="healthMessage()">Checking...</strong>
+      <small x-show="loaded && health.level !== 'checking' && health.level !== 'offline'" x-text="healthDetail()"></small>
+    </div>
+    <div class="alert-degraded" x-show="loaded && failedServices.length > 0">
+      <template x-for="svc in failedServices" :key="svc.name">
+        <div class="alert-item">
+          <span class="alert-arrow">&#9654;</span>
+          <span x-text="serviceLabel(svc.name)"></span>
+          <span class="alert-reason" x-text="svc.error"></span>
+        </div>
+      </template>
+    </div>
+    <div class="alert-aside">View all alerts &rarr;</div>
+  </div>
+
+  <!-- KPI Strip -->
+  <div x-show="loaded" class="kpi-strip">
+    <div class="kpi" x-show="shift.status === 'ok'">
+      <div class="kpi-label">Shift</div>
+      <div class="kpi-value" :class="'kpi-shift-' + (shift.data.shift || 'off').toLowerCase()" x-text="shift.data.shift || 'Off'"></div>
+      <div class="kpi-sub" x-show="shift.data.alarm_time">Alarm <span x-text="shift.data.alarm_time"></span></div>
+    </div>
+    <div class="kpi" x-show="system.status === 'ok'">
+      <div class="kpi-label">CPU</div>
+      <div class="kpi-value" x-text="system.data.cpu_percent + '%'"></div>
+      <div class="kpi-sub">System load</div>
+    </div>
+    <div class="kpi" x-show="system.status === 'ok'">
+      <div class="kpi-label">Memory</div>
+      <div class="kpi-value" x-text="system.data.memory.percent + '%'"></div>
+      <div class="kpi-sub" x-text="system.data.memory.used_gb + ' / ' + system.data.memory.total_gb + ' GB'"></div>
+    </div>
+    <div class="kpi" x-show="system.status === 'ok'">
+      <div class="kpi-label">Disk</div>
+      <div class="kpi-value" x-text="system.data.disk.percent + '%'"></div>
+      <div class="kpi-sub" x-text="system.data.disk.used_gb + ' / ' + system.data.disk.total_gb + ' GB'"></div>
+    </div>
+    <div class="kpi" x-show="docker.status === 'ok'">
+      <div class="kpi-label">Containers</div>
+      <div class="kpi-value" x-text="docker.data.running + '/' + docker.data.total"></div>
+      <div class="kpi-sub">Running</div>
+    </div>
+    <div class="kpi" x-show="system.status === 'ok'">
+      <div class="kpi-label">Uptime</div>
+      <div class="kpi-value kpi-value-sm" x-text="system.data.uptime"></div>
+      <div class="kpi-sub">Since last reboot</div>
+    </div>
+  </div>
+
+  <!-- Main Two-Column -->
+  <div x-show="loaded" class="main-grid">
+
+    <!-- Left: Gauges -->
+    <div class="panel">
+      <div class="panel-title">
+        <h2>System Resources</h2>
+        <span>Current utilization</span>
+      </div>
+      <div x-show="system.status === 'error'" class="ov-error">System stats unavailable</div>
+      <div x-show="system.status === 'ok'" class="gauge-grid">
+
+        <div class="gauge-item">
+          <div class="gauge" :style="'--pct:' + system.data.cpu_percent + ';--accent:var(--cyan)'">
+            <div class="g-value" x-text="system.data.cpu_percent + '%'"></div>
+            <div class="g-scale"><span>0</span><span>100</span></div>
+          </div>
+          <div class="gauge-label">CPU</div>
+          <div class="gauge-detail">System load</div>
+        </div>
+
+        <div class="gauge-item">
+          <div class="gauge" :style="'--pct:' + system.data.memory.percent + ';--accent:var(--violet)'">
+            <div class="g-value" x-text="system.data.memory.percent + '%'"></div>
+            <div class="g-scale"><span>0</span><span>100</span></div>
+          </div>
+          <div class="gauge-label">Memory</div>
+          <div class="gauge-detail" x-text="system.data.memory.used_gb + ' / ' + system.data.memory.total_gb + ' GB'"></div>
+        </div>
+
+        <div class="gauge-item">
+          <div class="gauge" :style="'--pct:' + system.data.disk.percent + ';--accent:var(--green)'">
+            <div class="g-value" x-text="system.data.disk.percent + '%'"></div>
+            <div class="g-scale"><span>0</span><span>100</span></div>
+          </div>
+          <div class="gauge-label">Disk</div>
+          <div class="gauge-detail" x-text="system.data.disk.used_gb + ' / ' + system.data.disk.total_gb + ' GB'"></div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Right: Context -->
+    <div class="panel">
+      <div class="panel-title">
+        <h2>Operational Context</h2>
+        <span>Live</span>
+      </div>
+      <div class="context">
+
+        <div class="context-row" x-show="docker.status === 'ok'">
+          <div class="ctx-head">
+            <span class="ctx-name">Containers</span>
+            <span class="ctx-value" x-text="docker.data.running + ' / ' + docker.data.total"></span>
+          </div>
+          <div class="ctx-detail">All monitored containers running</div>
+        </div>
+
+        <div class="context-row" x-show="ha.status === 'ok'">
+          <div class="ctx-head">
+            <span class="ctx-name">Household</span>
+            <span class="ctx-value" x-text="peopleSummary()"></span>
+          </div>
+          <div class="ctx-detail">
+            <template x-for="t in (ha.data.temperatures || []).slice(0, 2)" :key="t.name">
+              <div><span x-text="t.name"></span>: <span x-text="t.state + ' DEG'"></span></div>
+            </template>
+          </div>
+        </div>
+
+        <div class="context-row" x-show="weather.status === 'ok'">
+          <div class="ctx-head">
+            <span class="ctx-name">Weather</span>
+            <span class="ctx-value" x-text="weather.data.temp != null ? Math.round(weather.data.temp) + ' C' : '?'"></span>
+          </div>
+          <div class="ctx-detail" x-text="weather.data.condition"></div>
+        </div>
+
+        <div class="context-row" x-show="nzbget.status === 'ok'">
+          <div class="ctx-head">
+            <span class="ctx-name">Downloads</span>
+            <template x-if="nzbget.data.active_downloads.length > 0">
+              <span class="ctx-value" style="color:var(--blue)" x-text="nzbget.data.download_rate_human"></span>
+            </template>
+            <template x-if="nzbget.data.active_downloads.length === 0">
+              <span class="ctx-value ctx-idle">-- Idle</span>
+            </template>
+          </div>
+          <div class="ctx-detail">
+            <template x-if="nzbget.data.active_downloads.length > 0">
+              <span x-text="nzbget.data.active_downloads.length + ' active download(s)'"></span>
+            </template>
+            <template x-if="nzbget.data.active_downloads.length === 0">
+              <span>No active downloads</span>
+            </template>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Activity + Quick Access -->
+  <div x-show="loaded" class="bottom-grid">
+    <div class="panel">
+      <div class="panel-title">
+        <h2>Recent Activity</h2>
+        <span>Last 30 minutes</span>
+      </div>
+      <div class="activity-list" x-show="nzbget.status === 'ok' && nzbget.data.active_downloads.length > 0">
+        <template x-for="(d,i) in nzbget.data.active_downloads.slice(0,3)" :key="i">
+          <div class="activity-item">
+            <div class="act-icon">D</div>
+            <div class="act-text">
+              <strong>Download</strong>
+              <small x-text="d.name"></small>
+            </div>
+            <div class="act-progress" x-text="d.progress + '%'"></div>
+          </div>
+        </template>
+      </div>
+      <div x-show="!nzbget.data.active_downloads || nzbget.data.active_downloads.length === 0" class="activity-empty">No recent activity to report.</div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">
+        <h2>Quick Access</h2>
+        <span>Services</span>
+      </div>
+      <div class="quick-grid">
+        <a class="quick-card" href="/vnext/infra">
+          <span class="qc-icon">&#9632;</span>
+          <b>Proxmox</b>
+        </a>
+        <a class="quick-card" href="https://ha.media.alexbucket.com" target="_blank">
+          <span class="qc-icon">&#8962;</span>
+          <b>Home Assistant</b>
+        </a>
+        <a class="quick-card" href="https://paperless.media.alexbucket.com" target="_blank">
+          <span class="qc-icon">&#9640;</span>
+          <b>Paperless</b>
+        </a>
+        <a class="quick-card" href="https://immich.media.alexbucket.com" target="_blank">
+          <span class="qc-icon">&#9635;</span>
+          <b>Immich</b>
+        </a>
+        <a class="quick-card" href="https://jellyfin.media.alexbucket.com" target="_blank">
+          <span class="qc-icon">&#9654;</span>
+          <b>Jellyfin</b>
+        </a>
+        <a class="quick-card" href="/vnext/infra">
+          <span class="qc-icon">&#9881;</span>
+          <b>Infrastructure</b>
+        </a>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+document.addEventListener('alpine:init', () => {
+  Alpine.data('overviewWidget', () => ({
+    loaded: false,
+    shift: { status: 'loading', data: { shift: '', detail: '', alarm_time: '', bin_night: 'No' } },
+    weather: { status: 'loading', data: { icon: 'WX', temp: null, condition: '' } },
+    system: { status: 'loading', data: { cpu_percent: 0, memory: { percent: 0, used_gb: 0, total_gb: 0 }, disk: { percent: 0, used_gb: 0, total_gb: 0 }, uptime: '' } },
+    docker: { status: 'loading', data: { running: 0, total: 0 } },
+    ha: { status: 'loading', data: { connected: false, people_home: 0, people: [] } },
+    nzbget: { status: 'loading', data: { download_rate_human: '0 B/s', queue_size_mb: 0, active_downloads: [], paused: false } },
+    health: { level: 'checking', ok: 0, total: 0, errors: 0 },
+    failedServices: [],
+
+    fetchOverview() {
+      fetch('/vnext/api/overview')
+        .then(r => r.json())
+        .then(r => {
+          const d = r.data || {};
+          this.shift = d.shift || { status: 'error', data: null };
+          this.weather = d.weather || { status: 'error', data: null };
+          this.system = d.system || { status: 'error', data: null };
+          this.docker = d.docker || { status: 'error', data: null };
+          this.ha = d.ha || { status: 'error', data: null };
+          this.nzbget = d.nzbget || { status: 'error', data: null };
+          this.health = r.health || { level: 'checking', ok: 0, total: 0, errors: 0 };
+          this.failedServices = [];
+          for (const [name, svc] of Object.entries(d)) {
+            if (svc.status === 'error') { this.failedServices.push({ name: name, error: svc.error || 'Unknown error' }); }
+          }
+          this.loaded = true;
+        })
+        .catch(() => { this.loaded = true; this.health = { level: 'offline', ok: 0, total: 0, errors: 0 }; });
+    },
+
+    healthMessage() {
+      const h = this.health;
+      if (h.level === 'healthy') return 'All systems nominal';
+      if (h.level === 'degraded') return h.errors + ' service(s) degraded';
+      if (h.level === 'critical') return 'Critical failures';
+      if (h.level === 'offline') return 'Dashboard offline';
+      return 'Checking...';
+    },
+    healthDetail() {
+      const h = this.health;
+      if (h.level === 'healthy') return h.ok + ' / ' + h.total + ' services healthy';
+      return h.ok + ' of ' + h.total + ' services healthy';
+    },
+    serviceLabel(name) {
+      const labels = { system: 'System', docker: 'Docker', ha: 'Home Assistant', weather: 'Weather', shift: 'Shift', nzbget: 'NZBGet', media: 'Media', hermes: 'Hermes', amp: 'Game Servers', proxmox: 'Proxmox', adguard: 'AdGuard' };
+      return labels[name] || name;
+    },
+    peopleSummary() {
+      const ha = this.ha?.data;
+      if (!ha) return 'Unknown';
+      const home = (ha.people || []).filter(p => p.state === 'home').map(p => p.name);
+      if (home.length === 0) return 'No one home';
+      if (home.length === 1) return home[0] + ' home';
+      return home[0] + ' + ' + (home.length - 1) + ' others home';
+    },
+  }));
+});
+</script>
+{% endblock %}
